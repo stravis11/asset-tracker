@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Dashboard - BTC, SOL, ETH</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .last-updated {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+
+        .crypto-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .crypto-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 212, 255, 0.2);
+            border-color: rgba(0, 212, 255, 0.3);
+        }
+
+        .crypto-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+        }
+
+        .crypto-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .btc .crypto-icon {
+            background: linear-gradient(45deg, #f7931a, #ffb347);
+            color: white;
+        }
+
+        .eth .crypto-icon {
+            background: linear-gradient(45deg, #627eea, #a5b4fc);
+            color: white;
+        }
+
+        .sol .crypto-icon {
+            background: linear-gradient(45deg, #00ffa3, #7024e4);
+            color: white;
+        }
+
+        .crypto-name {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .crypto-price {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #ffffff;
+        }
+
+        .change-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .change-label {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+        }
+
+        .change-value {
+            display: inline-flex;
+            align-items: center;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .change-positive {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+
+        .change-negative {
+            background: rgba(255, 0, 118, 0.2);
+            color: #ff0076;
+        }
+
+        .change-neutral {
+            background: rgba(160, 160, 160, 0.2);
+            color: #a0a0a0;
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid #00d4ff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 40px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(0, 255, 136, 0.1);
+            color: #00ff88;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 20px;
+        }
+
+        .pulse {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+            }
+
+            .crypto-price {
+                font-size: 2rem;
+            }
+
+            .dashoard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Crypto Dashboard</h1>
+            <div id="lastUpdated" class="last-updated">Updating...</div>
+            <div id="statusIndicator" class="status-indicator">
+                <div class="pulse"></div>
+                <span>Live Updates Every 5 Minutes</span>
+            </div>
+        </header>
+
+        <div id="loading" class="loading-spinner"></div>
+
+        <div class="dashboard-grid" id="dashboard" style="display: none;">
+            <!-- Bitcoin Card -->
+            <div class="crypto-card btc">
+                <div class="crypto-icon">₿</div>
+                <div class="crypto-name">Bitcoin</div>
+                <div class="crypto-price" id="btc-price">$70,000.00</div>
+                <div class="change-container">
+                    <span class="change-label">24h Change:</span>
+                    <span class="change-value change-neutral" id="btc-change">--</span>
+                </div>
+            </div>
+
+            <!-- Ethereum Card -->
+            <div class="crypto-card eth">
+                <div class="crypto-icon">Ξ</div>
+                <div class="crypto-name">Ethereum</div>
+                <div class="crypto-price" id="eth-price">$2,000.00</div>
+                <div class="change-container">
+                    <span class="change-label">24h Change:</span>
+                    <span class="change-value change-neutral" id="eth-change">--</span>
+                </div>
+            </div>
+
+            <!-- Solana Card -->
+            <div class="crypto-card sol">
+                <div class="crypto-icon">◈</div>
+                <div class="crypto-name">Solana</div>
+                <div class="crypto-price" id="sol-price">$80.00</div>
+                <div class="change-container">
+                    <span class="change-label">24h Change:</span>
+                    <span class="change-value change-neutral" id="sol-change">--</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cryptocurrencies to track
+        const CRYPTO_IDS = ['bitcoin', 'ethereum', 'solana'];
+        const CRYPTO_NAMES = {
+            'bitcoin': { name: 'Bitcoin', symbol: '₿', id: 'btc' },
+            'ethereum': { name: 'Ethereum', symbol: 'Ξ', id: 'eth' },
+            'solana': { name: 'Solana', symbol: '◈', id: 'sol' }
+        };
+
+        // Fetch crypto data from CoinGecko API
+        async function fetchCryptoData() {
+            try {
+                const url = new URL('https://api.coingecko.com/api/v3/simple/price');
+                url.searchParams.set('ids', CRYPTO_IDS.join(','));
+                url.searchParams.set('vs_currencies', 'usd');
+                url.searchParams.set('include_24h_change', 'true');
+
+                const response = await fetch(url.toString());
+                if (!response.ok) throw new Error('API request failed');
+                
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('Error fetching crypto data:', error);
+                return null;
+            }
+        }
+
+        // Update UI with crypto data
+        function updateUI(data) {
+            const now = new Date();
+            const formattedDate = now.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            document.getElementById('lastUpdated').textContent = 
+                `Last Updated: ${formattedDate}`;
+
+            // Hide loading spinner
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'grid';
+
+            // Update each cryptocurrency
+            CRYPTO_IDS.forEach(coinId => {
+                const cryptoData = CRYPTO_NAMES[coinId];
+                const price = data[coinId]?.usd || 0;
+                const change24h = data[coinId]?.usd_24h_change || 0;
+
+                // Update price
+                document.getElementById(`${cryptoData.id}-price`).textContent = 
+                    `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+                // Update 24h change
+                const changeElement = document.getElementById(`${cryptoData.id}-change`);
+                const changeValue = Math.abs(change24h).toFixed(2) + '%';
+                const sign = change24h >= 0 ? '+' : '';
+                
+                changeElement.textContent = `${sign}${changeValue}`;
+                
+                // Update color based on change
+                changeElement.className = 'change-value';
+                if (change24h > 0) {
+                    changeElement.classList.add('change-positive');
+                } else if (change24h < 0) {
+                    changeElement.classList.add('change-negative');
+                } else {
+                    changeElement.classList.add('change-neutral');
+                }
+            });
+        }
+
+        // Initialize the dashboard
+        async function initDashboard() {
+            // Initial fetch
+            const data = await fetchCryptoData();
+            if (data) {
+                updateUI(data);
+            }
+
+            // Set up interval to update every 5 minutes (300000 milliseconds)
+            setInterval(async () => {
+                console.log('Auto-refreshing at', new Date().toLocaleTimeString());
+                const data = await fetchCryptoData();
+                if (data) {
+                    updateUI(data);
+                }
+            }, 300000); // 5 minutes
+        }
+
+        // Start the dashboard when page loads
+        window.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
