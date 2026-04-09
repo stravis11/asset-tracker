@@ -316,7 +316,7 @@
                     <button class="timeframe-btn" data-crypto="btc" data-days="180">6M</button>
                     <button class="timeframe-btn" data-crypto="btc" data-days="365">1Y</button>
                 </div>
-                <button id="updateChartBtn" data-crypto="btc">Update Chart</button>
+                <button class="update-chart-btn" data-crypto="btc">Update Chart</button>
             </div>
 
             <!-- Ethereum Card -->
@@ -341,7 +341,7 @@
                     <button class="timeframe-btn" data-crypto="eth" data-days="180">6M</button>
                     <button class="timeframe-btn" data-crypto="eth" data-days="365">1Y</button>
                 </div>
-                <button id="updateChartBtn" data-crypto="eth">Update Chart</button>
+                <button class="update-chart-btn" data-crypto="eth">Update Chart</button>
             </div>
 
             <!-- Solana Card -->
@@ -366,7 +366,7 @@
                     <button class="timeframe-btn" data-crypto="sol" data-days="180">6M</button>
                     <button class="timeframe-btn" data-crypto="sol" data-days="365">1Y</button>
                 </div>
-                <button id="updateChartBtn" data-crypto="sol">Update Chart</button>
+                <button class="update-chart-btn" data-crypto="sol">Update Chart</button>
             </div>
         </div>
     </div>
@@ -558,9 +558,20 @@
         }
 
         // Fetch and update chart
-        async function updateChart(cryptoId, days) {
-            const updateBtn = document.getElementById('updateChartBtn');
-            const btnContainer = updateBtn.closest('.crypto-card');
+        async function updateChart(cryptoId, days, btnContext = null) {
+            let updateBtn;
+            let btnContainer;
+            
+            if (btnContext) {
+                // When called from a timeframe button
+                updateBtn = btnContext.querySelector('.update-chart-btn');
+                btnContainer = btnContext;
+            } else {
+                // When called from the Update Chart button
+                updateBtn = document.querySelector(`.update-chart-btn[data-crypto="${cryptoId}"]`);
+                btnContainer = updateBtn.closest('.crypto-card');
+            }
+            
             const timeFrameBtns = btnContainer.querySelectorAll('.timeframe-btn');
             
             // Set active timeframe button
@@ -642,31 +653,31 @@
             // Initialize charts on each card
             CRYPTO_IDS.forEach(coinId => {
                 const cryptoId = CRYPTO_NAMES[coinId].id;
-                const timeFrameButtons = document.querySelectorAll('.timeframe-btn[data-crypto="' + cryptoId + '"]');
-                const updateBtn = document.getElementById('updateChartBtn');
-                
+
+                // Initialize charts with event listeners scoped to each card container
+                const cardContainer = document.querySelector(`.crypto-card .timeframe-btn[data-crypto="${cryptoId}"]`).closest('.crypto-card');
+                const timeFrameButtons = cardContainer.querySelectorAll('.timeframe-btn[data-crypto="' + cryptoId + '"]');
+                const updateBtn = cardContainer.querySelector('.update-chart-btn');
+
                 // Initialize charts with event listeners
                 timeFrameButtons.forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const target = e.target.closest('[data-crypto]');
                         if (target) {
-                            updateChart(target.dataset.crypto, parseInt(target.dataset.days));
+                            updateChart(target.dataset.crypto, parseInt(target.dataset.days), cardContainer);
                         }
                     });
                 });
 
                 updateBtn.addEventListener('click', async () => {
-                    const target = updateBtn.closest('[data-crypto]');
-                    if (target) {
-                        // Find active timeframe button
-                        const activeBtn = document.querySelector(`.timeframe-btn[data-crypto="${target.dataset.crypto}"].active`);
-                        const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
-                        await updateChart(target.dataset.crypto, days);
-                    }
+                    // Find active timeframe button
+                    const activeBtn = cardContainer.querySelector(`.timeframe-btn[data-crypto="${cryptoId}"].active`);
+                    const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
+                    await updateChart(cryptoId, days, cardContainer);
                 });
 
                 // Initialize with 1 day data
-                updateChart(cryptoId, 1).then(() => {
+                updateChart(cryptoId, 1, cardContainer).then(() => {
                     updateBtn.textContent = 'Refresh Chart';
                 });
             });
