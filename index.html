@@ -63,6 +63,15 @@
             margin-top: 20px;
             position: relative;
             height: 200px;
+            width: 100%;
+            overflow: hidden;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 8px;
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+            height: 100% !important;
         }
 
         #updateChartBtn {
@@ -306,7 +315,7 @@
 
                 <h2>📈 Price History</h2>
                 <div id="btc-chart-container" class="chart-container">
-                    <canvas id="btc-chart"></canvas>
+                    <canvas id="btc-chart" style="background: rgba(0, 212, 255, 0.1);"></canvas>
                 </div>
                 <div class="timeframe-selector">
                     <button class="timeframe-btn active" data-crypto="btc" data-days="1">24H</button>
@@ -331,7 +340,7 @@
 
                 <h2>📈 Price History</h2>
                 <div id="eth-chart-container" class="chart-container">
-                    <canvas id="eth-chart"></canvas>
+                    <canvas id="eth-chart" style="background: rgba(98, 126, 234, 0.1);"></canvas>
                 </div>
                 <div class="timeframe-selector">
                     <button class="timeframe-btn active" data-crypto="eth" data-days="1">24H</button>
@@ -356,7 +365,7 @@
 
                 <h2>📈 Price History</h2>
                 <div id="sol-chart-container" class="chart-container">
-                    <canvas id="sol-chart"></canvas>
+                    <canvas id="sol-chart" style="background: rgba(0, 255, 163, 0.1);"></canvas>
                 </div>
                 <div class="timeframe-selector">
                     <button class="timeframe-btn active" data-crypto="sol" data-days="1">24H</button>
