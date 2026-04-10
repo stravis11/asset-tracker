@@ -644,9 +644,9 @@
             try {
                 // Use coinId (bitcoin/ethereum/solana) NOT cryptoId (btc/eth/sol) for the API
                 const data = await fetchHistoricalData(coinId, days);
-                console.log(`updateChart: Retrieved ${data?.prices?.length || 0} data points`);
-                if (data && data.prices && data.prices.length > 0) {
-                    updateChartData(cryptoId, data.prices, chartColors[cryptoId]);
+                console.log(`updateChart: Retrieved ${data?.length || 0} data points`);
+                if (data && data.length > 0) {
+                    updateChartData(cryptoId, data, chartColors[cryptoId]);
                     console.log(`Successfully updated ${cryptoId} chart`);
                 } else {
                     console.error(`No data returned for ${cryptoId}:`, {
