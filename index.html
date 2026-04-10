@@ -646,13 +646,24 @@
                 console.log(`updateChart: Retrieved ${data?.prices?.length || 0} data points`);
                 if (data && data.prices && data.prices.length > 0) {
                     updateChartData(cryptoId, data.prices, chartColors[cryptoId]);
+                    console.log(`Successfully updated ${cryptoId} chart`);
                 } else {
-                    console.error(`No data returned for ${cryptoId}`);
+                    console.error(`No data returned for ${cryptoId}:`, {
+                        data: !!data,
+                        hasPrices: data?.prices ? true : false,
+                        pricesLength: data?.prices?.length
+                    });
                     alert('No chart data available');
                 }
             } catch (error) {
                 console.error(`Failed to update ${cryptoId} chart:`, error);
-                alert(`Failed to load chart data: ${error.message}`);
+                console.error(`Error details:`, {
+                    name: error?.name,
+                    message: error?.message,
+                    stack: error?.stack,
+                    toString: error?.toString()
+                });
+                alert(`Failed to load chart data: ${error?.message || 'Unknown error'}`);
             } finally {
                 updateBtn.disabled = false;
             }
