@@ -437,100 +437,109 @@
 
         // Create chart for a cryptocurrency
         function createChart(cryptoId, ctx, color) {
-            if (charts[cryptoId]) {
-                charts[cryptoId].destroy();
-            }
-
-            charts[cryptoId] = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Price (USD)',
-                        data: [],
-                        borderColor: color,
-                        backgroundColor: color + '20',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 6
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(26, 26, 46, 0.9)',
-                            titleColor: '#00d4ff',
-                            bodyColor: '#ffffff',
-                            borderColor: 'rgba(0, 212, 255, 0.3)',
-                            borderWidth: 1,
-                            padding: 12,
-                            displayColors: true,
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed.y !== null) {
-                                        label += new Intl.NumberFormat('en-US', {
-                                            style: 'currency',
-                                            currency: 'USD'
-                                        }).format(context.parsed.y);
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.05)'
-                            },
-                            ticks: {
-                                color: '#a0a0a0',
-                                maxTicksLimit: 8,
-                                callback: function(value, index, values) {
-                                    const date = this.getLabelForValue(value);
-                                    if (date instanceof Date) {
-                                        return date.toLocaleDateString('en-US', {
-                                            month: 'short',
-                                            day: 'numeric'
-                                        });
-                                    }
-                                    return date;
-                                }
-                            }
-                        },
-                        y: {
-                            grid: {
-                                color: 'rgba(255, 255, 255, 0.05)'
-                            },
-                            ticks: {
-                                color: '#a0a0a0',
-                                callback: function(value) {
-                                    return '$' + value.toLocaleString();
-                                }
-                            }
-                        }
-                    },
-                    animation: {
-                        duration: 500,
-                        easing: 'easeOutQuart'
-                    }
+            console.log(`createChart for ${cryptoId}, ctx:`, !!ctx);
+            
+            if (ctx) {
+                if (charts[cryptoId]) {
+                    console.log(`Destroying existing chart for ${cryptoId}`);
+                    charts[cryptoId].destroy();
                 }
-            });
+
+                charts[cryptoId] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Price (USD)',
+                            data: [],
+                            borderColor: color,
+                            backgroundColor: color + '20',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(26, 26, 46, 0.9)',
+                                titleColor: '#00d4ff',
+                                bodyColor: '#ffffff',
+                                borderColor: 'rgba(0, 212, 255, 0.3)',
+                                borderWidth: 1,
+                                padding: 12,
+                                displayColors: true,
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.y !== null) {
+                                            label += new Intl.NumberFormat('en-US', {
+                                                style: 'currency',
+                                                currency: 'USD'
+                                            }).format(context.parsed.y);
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.05)'
+                                },
+                                ticks: {
+                                    color: '#a0a0a0',
+                                    maxTicksLimit: 8,
+                                    callback: function(value, index, values) {
+                                        const date = this.getLabelForValue(value);
+                                        if (date instanceof Date) {
+                                            return date.toLocaleDateString('en-US', {
+                                                month: 'short',
+                                                day: 'numeric'
+                                            });
+                                        }
+                                        return date;
+                                    }
+                                }
+                            },
+                            y: {
+                                grid: {
+                                    color: 'rgba(255, 255, 255, 0.05)'
+                                },
+                                ticks: {
+                                    color: '#a0a0a0',
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        },
+                        animation: {
+                            duration: 500,
+                            easing: 'easeOutQuart'
+                        }
+                    }
+                });
+                
+                console.log(`Created chart for ${cryptoId}:`, charts[cryptoId]);
+            } else {
+                console.error(`createChart: No context for ${cryptoId}`);
+            }
         }
 
         // Update chart with data
@@ -562,21 +571,39 @@
             let updateBtn;
             let btnContainer;
             
+            console.log(`updateChart called for ${cryptoId}, days: ${days}`);
+            
             if (btnContext) {
                 // When called from a timeframe button
                 updateBtn = btnContext.querySelector('.update-chart-btn');
                 btnContainer = btnContext;
+                
+                if (!updateBtn) {
+                    console.error(`Could not find update button in context:`, btnContext);
+                    return;
+                }
             } else {
                 // When called from the Update Chart button
                 updateBtn = document.querySelector(`.update-chart-btn[data-crypto="${cryptoId}"]`);
+                if (!updateBtn) {
+                    console.error(`Could not find update button for ${cryptoId}`);
+                    return;
+                }
                 btnContainer = updateBtn.closest('.crypto-card');
             }
             
-            const timeFrameBtns = btnContainer.querySelectorAll('.timeframe-btn');
+            if (!btnContainer) {
+                console.error(`Could not find card container for ${cryptoId}`);
+                return;
+            }
             
-            // Set active timeframe button
+            console.log(`updateChart: Found container, setting active button to ${days} days`);
+            
+            // Set active timeframe button - but only within THIS card!
+            const timeFrameBtns = btnContainer.querySelectorAll('.timeframe-btn');
             timeFrameBtns.forEach(btn => {
-                btn.classList.toggle('active', btn.dataset.days === days.toString());
+                const shouldBeActive = btn.dataset.days === days.toString();
+                btn.classList.toggle('active', shouldBeActive);
             });
 
             // Disable update button during fetch
@@ -584,8 +611,12 @@
 
             try {
                 const data = await fetchHistoricalData(cryptoId, days);
-                if (data) {
+                console.log(`updateChart: Retrieved ${data ? data.length : 0} data points`);
+                if (data && data.length > 0) {
                     updateChartData(cryptoId, data, chartColors[cryptoId]);
+                } else {
+                    console.error(`No data returned for ${cryptoId}`);
+                    alert('No chart data available');
                 }
             } catch (error) {
                 console.error(`Failed to update ${cryptoId} chart:`, error);
