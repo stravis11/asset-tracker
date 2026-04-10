@@ -641,7 +641,8 @@
             updateBtn.disabled = true;
 
             try {
-                const data = await fetchHistoricalData(cryptoId, days);
+                // Use coinId (bitcoin/ethereum/solana) NOT cryptoId (btc/eth/sol) for the API
+                const data = await fetchHistoricalData(coinId, days);
                 console.log(`updateChart: Retrieved ${data?.prices?.length || 0} data points`);
                 if (data && data.prices && data.prices.length > 0) {
                     updateChartData(cryptoId, data.prices, chartColors[cryptoId]);
