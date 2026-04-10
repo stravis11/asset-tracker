@@ -424,22 +424,34 @@
 
         // Fetch historical price data
         async function fetchHistoricalData(coinId, days) {
+            console.log(`Fetching historical data for ${coinId}, ${days} days`);
             try {
                 const url = new URL(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`);
                 url.searchParams.set('vs_currency', 'usd');
                 url.searchParams.set('days', days.toString());
                 url.searchParams.set('interval', days < 7 ? 'hourly' : 'daily');
 
+                console.log(`Fetching: ${url.toString()}`);
+                
                 const response = await fetch(url.toString());
-                if (!response.ok) throw new Error('Failed to fetch historical data');
+                if (!response.ok) {
+                    console.error(`API response not ok:`, response.status, response.statusText);
+                    throw new Error(`API error: ${response.status}`);
+                }
                 
                 const data = await response.json();
-                return data.prices.map(price => ({
-                    date: new Date(price[0]),
-                    price: price[1]
-                }));
+                console.log(`API returned: prices=${data.prices?.length || 0}, market_caps=${data.market_caps?.length || 0}`);
+                
+                // Return just the prices array (it's already in the right format: [[timestamp, price], ...])
+                if (data.prices && data.prices.length > 0) {
+                    console.log(`Success! Returning ${data.prices.length} data points`);
+                    return data.prices;
+                } else {
+                    console.error(`No prices data in response`);
+                    return null;
+                }
             } catch (error) {
-                console.error(`Error fetching historical data for ${coinId}:`, error);
+                console.error(`Error fetching historical data for ${coinId}:`, error.message);
                 return null;
             }
         }
@@ -552,26 +564,36 @@
         }
 
         // Update chart with data
-        function updateChartData(cryptoId, data, color) {
+        function updateChartData(cryptoId, prices, color) {
             const canvas = document.getElementById(`${cryptoId}-chart`);
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas?.getContext('2d');
 
             // Get labels and prices
-            const labels = data.map(item => {
-                const date = item.date instanceof Date ? item.date : new Date(item.date);
+            const labels = prices.map(item => {
+                const date = new Date(item[0]);
                 return date.toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric'
                 });
             });
-            const prices = data.map(item => item.price);
+            const priceValues = prices.map(item => item[1]);
+            
+            console.log(`updateChartData: ${labels.length} labels, ${priceValues.length} values`);
 
             if (charts[cryptoId]) {
+                console.log(`Updating existing chart for ${cryptoId}`);
                 charts[cryptoId].data.labels = labels;
-                charts[cryptoId].data.datasets[0].data = prices;
+                charts[cryptoId].data.datasets[0].data = priceValues;
                 charts[cryptoId].update('none');
             } else {
+                console.log(`Creating NEW chart for ${cryptoId}`);
                 createChart(cryptoId, ctx, color);
+                // Force update to draw immediately
+                if (charts[cryptoId]) {
+                    charts[cryptoId].data.labels = labels.slice(0, 10);
+                    charts[cryptoId].data.datasets[0].data = priceValues.slice(0, 10);
+                    charts[cryptoId].update();
+                }
             }
         }
 
@@ -620,9 +642,9 @@
 
             try {
                 const data = await fetchHistoricalData(cryptoId, days);
-                console.log(`updateChart: Retrieved ${data ? data.length : 0} data points`);
-                if (data && data.length > 0) {
-                    updateChartData(cryptoId, data, chartColors[cryptoId]);
+                console.log(`updateChart: Retrieved ${data?.prices?.length || 0} data points`);
+                if (data && data.prices && data.prices.length > 0) {
+                    updateChartData(cryptoId, data.prices, chartColors[cryptoId]);
                 } else {
                     console.error(`No data returned for ${cryptoId}`);
                     alert('No chart data available');
