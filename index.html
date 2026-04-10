@@ -644,43 +644,56 @@
 
         // Initialize the dashboard
         async function initDashboard() {
+            console.log('Dashboard initializing...');
+            
             // Initial fetch
             const data = await fetchCryptoData();
             if (data) {
                 updateUI(data);
+                console.log('UI updated with current prices');
+            } else {
+                console.error('Failed to fetch crypto data');
             }
 
-            // Initialize charts on each card
-            CRYPTO_IDS.forEach(coinId => {
-                const cryptoId = CRYPTO_NAMES[coinId].id;
+            // Initialize charts on each card - use setTimeout to ensure DOM is ready
+            setTimeout(() => {
+                CRYPTO_IDS.forEach(coinId => {
+                    const cryptoId = CRYPTO_NAMES[coinId].id;
+                    console.log('Setting up chart for:', cryptoId);
 
-                // Initialize charts with event listeners scoped to each card container
-                const cardContainer = document.querySelector(`.crypto-card .timeframe-btn[data-crypto="${cryptoId}"]`).closest('.crypto-card');
-                const timeFrameButtons = cardContainer.querySelectorAll('.timeframe-btn[data-crypto="' + cryptoId + '"]');
-                const updateBtn = cardContainer.querySelector('.update-chart-btn');
+                    // Initialize charts with event listeners scoped to each card container
+                    const cardContainer = document.querySelector(`.crypto-card .timeframe-btn[data-crypto="${cryptoId}"]`).closest('.crypto-card');
+                    const timeFrameButtons = cardContainer.querySelectorAll('.timeframe-btn[data-crypto="' + cryptoId + '"]');
+                    const updateBtn = cardContainer.querySelector('.update-chart-btn');
 
-                // Initialize charts with event listeners
-                timeFrameButtons.forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        const target = e.target.closest('[data-crypto]');
-                        if (target) {
-                            updateChart(target.dataset.crypto, parseInt(target.dataset.days), cardContainer);
-                        }
+                    console.log('Found container, buttons:', timeFrameButtons.length, 'updateBtn:', updateBtn);
+
+                    // Initialize charts with event listeners
+                    timeFrameButtons.forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            console.log('Timeframe button clicked:', e.target.dataset.days, 'days');
+                            const target = e.target.closest('[data-crypto]');
+                            if (target) {
+                                updateChart(target.dataset.crypto, parseInt(target.dataset.days), cardContainer);
+                            }
+                        });
+                    });
+
+                    updateBtn.addEventListener('click', async () => {
+                        // Find active timeframe button
+                        const activeBtn = cardContainer.querySelector(`.timeframe-btn[data-crypto="${cryptoId}"].active`);
+                        console.log('Update button clicked, active button:', activeBtn);
+                        const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
+                        await updateChart(cryptoId, days, cardContainer);
+                    });
+
+                    // Initialize with 1 day data
+                    updateChart(cryptoId, 1, cardContainer).then(() => {
+                        updateBtn.textContent = 'Refresh Chart';
+                        console.log(cryptoId + ' chart initialized');
                     });
                 });
-
-                updateBtn.addEventListener('click', async () => {
-                    // Find active timeframe button
-                    const activeBtn = cardContainer.querySelector(`.timeframe-btn[data-crypto="${cryptoId}"].active`);
-                    const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
-                    await updateChart(cryptoId, days, cardContainer);
-                });
-
-                // Initialize with 1 day data
-                updateChart(cryptoId, 1, cardContainer).then(() => {
-                    updateBtn.textContent = 'Refresh Chart';
-                });
-            });
+            }, 150);  // Small delay to ensure DOM is fully rendered
 
             // Set up interval to update every 5 minutes (300000 milliseconds)
             setInterval(async () => {
