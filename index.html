@@ -598,21 +598,16 @@
         }
 
         // Fetch and update chart
-        async function updateChart(cryptoId, days, btnContext = null) {
+        async function updateChart(cryptoId, days, btnContext = null, coinId = null) {
             let updateBtn;
             let btnContainer;
             
-            console.log(`updateChart called for ${cryptoId}, days: ${days}`);
+            console.log(`updateChart called for ${cryptoId}, days: ${days}, coinId: ${coinId}`);
             
             if (btnContext) {
                 // When called from a timeframe button
                 updateBtn = btnContext.querySelector('.update-chart-btn');
                 btnContainer = btnContext;
-                
-                if (!updateBtn) {
-                    console.error(`Could not find update button in context:`, btnContext);
-                    return;
-                }
             } else {
                 // When called from the Update Chart button
                 updateBtn = document.querySelector(`.update-chart-btn[data-crypto="${cryptoId}"]`);
@@ -628,7 +623,13 @@
                 return;
             }
             
-            console.log(`updateChart: Found container, setting active button to ${days} days`);
+            // If coinId not provided, derive it from cryptoId
+            if (!coinId) {
+                const nameMatch = Object.keys(CRYPTO_NAMES).find(k => CRYPTO_NAMES[k].id === cryptoId);
+                coinId = nameMatch || coinId;
+            }
+            
+            console.log(`updateChart: Found container, setting active button to ${days} days, coinId: ${coinId}`);
             
             // Set active timeframe button - but only within THIS card!
             const timeFrameBtns = btnContainer.querySelectorAll('.timeframe-btn');
@@ -758,14 +759,11 @@
                         const activeBtn = cardContainer.querySelector(`.timeframe-btn[data-crypto="${cryptoId}"].active`);
                         console.log('Update button clicked, active button:', activeBtn);
                         const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
-                        await updateChart(cryptoId, days, cardContainer);
+                        await updateChart(cryptoId, days, cardContainer, coinId);
                     });
 
-                    // Initialize with 1 day data
-                    updateChart(cryptoId, 1, cardContainer).then(() => {
-                        updateBtn.textContent = 'Refresh Chart';
-                        console.log(cryptoId + ' chart initialized');
-                    });
+                    // Initialize with 1 day data - pass both cryptoId and coinId
+                    updateChart(cryptoId, 1, cardContainer, coinId);
                 });
             }, 150);  // Small delay to ensure DOM is fully rendered
 
