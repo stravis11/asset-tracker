@@ -381,6 +381,9 @@
     </div>
 
     <script>
+        // Helper for staggering API requests to avoid rate limits
+        const sleep = ms => new Promise(res => setTimeout(res, ms));
+        
         // Cryptocurrencies to track
         const CRYPTO_IDS = ['bitcoin', 'ethereum', 'solana'];
         const CRYPTO_NAMES = {
@@ -395,6 +398,10 @@
             eth: null,
             sol: null
         };
+
+        // Global rate limiting state
+        let lastRequestTime = 0;
+        const MIN_REQUEST_INTERVAL = 1500; // 1.5 seconds between any API calls
 
         // Colors for each chart
         const chartColors = {
@@ -424,6 +431,17 @@
 
         // Fetch historical price data
         async function fetchHistoricalData(coinId, days) {
+            // --- RATE LIMITING START ---
+            const now = Date.now();
+            const timeSinceLastRequest = now - lastRequestTime;
+            if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+                const waitTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+                console.log(`Rate limit protection: Waiting ${waitTime}ms before fetching ${coinId}...`);
+                await sleep(waitTime);
+            }
+            lastRequestTime = Date.now();
+            // --- RATE LIMITING END ---
+
             console.log(`Fetching historical data for ${coinId}, ${days} days`);
             let attempts = 0;
             const maxAttempts = 3;
@@ -658,8 +676,7 @@
                 } else {
                     console.error(`No data returned for ${cryptoId}:`, {
                         data: !!data,
-                        hasPrices: data?.prices ? true : false,
-                        pricesLength: data?.prices?.length
+                        pricesLength: data?.length
                     });
                     alert('No chart data available');
                 }
@@ -752,11 +769,14 @@
 
                     // Initialize charts with event listeners
                     timeFrameButtons.forEach(btn => {
-                        btn.addEventListener('click', (e) => {
+                        btn.addEventListener('click', async (e) => {
                             console.log('Timeframe button clicked:', e.target.dataset.days, 'days');
                             const target = e.target.closest('[data-crypto]');
                             if (target) {
-                                updateChart(target.dataset.crypto, parseInt(target.dataset.days), cardContainer);
+                                const cryptoId = target.dataset.crypto;
+                                const days = parseInt(target.dataset.days);
+                                const coinId = Object.keys(CRYPTO_NAMES).find(k => CRYPTO_NAMES[k].id === cryptoId);
+                                await updateChart(cryptoId, days, cardContainer, coinId);
                             }
                         });
                     });
