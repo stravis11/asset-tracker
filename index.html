@@ -634,9 +634,18 @@
 
             if (charts[cryptoId]) {
                 console.log(`Updating existing chart for ${cryptoId}`);
+                const previousDataLength = charts[cryptoId].data.datasets[0].data.length;
                 charts[cryptoId].data.labels = labels;
                 charts[cryptoId].data.datasets[0].data = priceValues;
-                charts[cryptoId].update('none');
+                
+                // Force chart update with full redraw
+                if (charts[cryptoId].data.labels.length !== previousDataLength) {
+                    // Data count changed - force full redraw
+                    charts[cryptoId].update();
+                } else {
+                    // Same data count - minimize animation
+                    charts[cryptoId].update('default');
+                }
             } else {
                 console.log(`Creating NEW chart for ${cryptoId}`);
                 createChart(cryptoId, ctx, color);
