@@ -459,7 +459,7 @@
                         attempts++;
                         const retryAfter = response.headers.get('Retry-After') || '30';
                         const waitTime = Math.min(parseInt(retryAfter) * 1000, 5000);
-                        console.warn(`Rate limited for ${coinId}. Wait ${waitTime}ms. Attempt ${attempts}/${maxAttempts}`);
+                        console.warn(`⚠️ API rate limited for ${coinId}. Wait ${waitTime}ms. Attempt ${attempts}/${maxAttempts}`);
                         await new Promise(resolve => setTimeout(resolve, waitTime));
                         delay = waitTime;
                         continue;
@@ -473,17 +473,34 @@
                     
                     // Handle different response structures
                     if (data.prices && Array.isArray(data.prices) && data.prices.length > 0) {
+                        console.log(`✅ ${coinId}: Retrieved ${data.prices.length} data points`);
                         return data.prices;
                     } else if (data.market_chart && data.market_chart.prices) {
+                        console.log(`✅ ${coinId}: Retrieved ${data.market_chart.prices.length} data points (market_chart)`);
                         return data.market_chart.prices;
                     } else {
-                        console.warn(`${coinId}: No prices in API response.`);
+                        console.warn(`⚠️ ${coinId}: No prices in API response. Full response:`, data);
                         return null;
                     }
                 } catch (error) {
-                    if (attempts >= maxAttempts - 1) throw error;
+                    // Check if it's a network/CORS error
+                    if (error.message.includes('Failed to fetch') || error.message.includes('CORS')) {
+                        console.error(`❌ Network error for ${coinId}: ${error.message}`);
+                        console.error(`   This may be due to API rate limiting or CORS restrictions.`);
+                        console.error(`   Please wait a moment and try again, or check if you've reached CoinGecko's API limits.`);
+                        
+                        if (attempts >= maxAttempts - 1) {
+                            throw new Error('Network error - API request failed');
+                        }
+                    }
+                    
+                    if (attempts >= maxAttempts - 1) {
+                        console.error(`❌ ${coinId} failed after ${maxAttempts} attempts:`, error.message);
+                        throw error;
+                    }
                     attempts++;
-                    console.warn(`${coinId} fetch error: ${error.message}. Retrying in ${delay}ms...`);
+                    const msg = error.message || 'Unknown error';
+                    console.warn(`⚠️ ${coinId} fetch error: ${msg}. Retrying in ${delay}ms... Attempt ${attempts}/${maxAttempts}`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     delay *= 2;
                 }
@@ -698,7 +715,15 @@
                     stack: error?.stack,
                     toString: error?.toString()
                 });
-                alert(`Failed to load chart data: ${error?.message || 'Unknown error'}`);
+                // Don't show alert for network errors, just log them
+                if (!error.message.includes('Network error')) {
+                    alert(`Unable to load chart data. This may be due to API rate limiting.
+
+Please wait a moment and try again, or check if you've reached CoinGecko's free API limits (10-50 calls/minute).
+
+Details: ${error?.message || 'Unknown error'}`);
+                }
+                console.error(`🚫 UI: Failed to update ${cryptoId} chart`);
             } finally {
                 updateBtn.disabled = false;
             }
