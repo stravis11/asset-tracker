@@ -615,7 +615,7 @@
             }
         }
 
-        // Update chart with data
+        // Update chart with data - FIXED for Chart.js v4.4.0
         function updateChartData(cryptoId, prices, color) {
             const canvas = document.getElementById(`${cryptoId}-chart`);
             const ctx = canvas?.getContext('2d');
@@ -633,19 +633,41 @@
             console.log(`updateChartData: ${labels.length} labels, ${priceValues.length} values`);
 
             if (charts[cryptoId]) {
-                console.log(`Updating existing chart for ${cryptoId}`);
+                console.log(`🔄 Updating existing chart for ${cryptoId}`);
                 const previousDataLength = charts[cryptoId].data.datasets[0].data.length;
-                charts[cryptoId].data.labels = labels;
-                charts[cryptoId].data.datasets[0].data = priceValues;
+                const labelsLength = labels.length;
                 
-                // Force chart update with full redraw
-                if (charts[cryptoId].data.labels.length !== previousDataLength) {
-                    // Data count changed - force full redraw
-                    charts[cryptoId].update();
-                } else {
-                    // Same data count - minimize animation
-                    charts[cryptoId].update('default');
-                }
+                console.log(`📊 Data count: ${labelsLength} (was ${previousDataLength})`);
+                
+                // CRITICAL FIX FOR CHART.JS V4.4.0:
+                // When data point count changes, we MUST tell Chart.js to not skip
+                // the update by using update('none') first, then update() after
+                // to force a redraw.
+                
+                // Step 1: Pause animation/update to prepare for data change
+                charts[cryptoId].update('none');
+                
+                // Step 2: Completely replace the data object
+                charts[cryptoId].data = {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Price (USD)',
+                        data: priceValues,
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHoverRadius: 6
+                    }]
+                };
+                
+                // Step 3: Force full redraw by calling update() without args
+                // This is CRITICAL - Chart.js v4 requires this when data count changes
+                charts[cryptoId].update();
+                
+                console.log(`✅ Chart updated with ${labelsLength} data points`);
             } else {
                 console.log(`Creating NEW chart for ${cryptoId}`);
                 createChart(cryptoId, ctx, color);
