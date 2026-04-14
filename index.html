@@ -323,7 +323,6 @@
                     <button class="timeframe-btn" data-crypto="btc" data-days="30">1M</button>
                     <button class="timeframe-btn" data-crypto="btc" data-days="90">3M</button>
                     <button class="timeframe-btn" data-crypto="btc" data-days="180">6M</button>
-                    <button class="timeframe-btn" data-crypto="btc" data-days="365">1Y</button>
                 </div>
                 <button class="update-chart-btn" data-crypto="btc">Update Chart</button>
             </div>
@@ -348,7 +347,6 @@
                     <button class="timeframe-btn" data-crypto="eth" data-days="30">1M</button>
                     <button class="timeframe-btn" data-crypto="eth" data-days="90">3M</button>
                     <button class="timeframe-btn" data-crypto="eth" data-days="180">6M</button>
-                    <button class="timeframe-btn" data-crypto="eth" data-days="365">1Y</button>
                 </div>
                 <button class="update-chart-btn" data-crypto="eth">Update Chart</button>
             </div>
@@ -373,7 +371,6 @@
                     <button class="timeframe-btn" data-crypto="sol" data-days="30">1M</button>
                     <button class="timeframe-btn" data-crypto="sol" data-days="90">3M</button>
                     <button class="timeframe-btn" data-crypto="sol" data-days="180">6M</button>
-                    <button class="timeframe-btn" data-crypto="sol" data-days="365">1Y</button>
                 </div>
                 <button class="update-chart-btn" data-crypto="sol">Update Chart</button>
             </div>
@@ -455,25 +452,38 @@
                     url.searchParams.set('interval', days < 7 ? 'hourly' : 'daily');
 
                     const response = await fetch(url.toString());
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.prices && data.prices.length > 0) {
-                            return data.prices;
-                        }
-                        return null;
-                    }
-                    if (response.status === 429) {
+                    const status = response.status;
+                    const statusText = response.statusText;
+
+                    if (status === 429) {
                         attempts++;
-                        console.warn(`Rate limited (429). Retrying in ${delay}ms... (Attempt ${attempts}/${maxAttempts})`);
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        delay *= 2;
+                        const retryAfter = response.headers.get('Retry-After') || '30';
+                        const waitTime = Math.min(parseInt(retryAfter) * 1000, 5000);
+                        console.warn(`Rate limited for ${coinId}. Wait ${waitTime}ms. Attempt ${attempts}/${maxAttempts}`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        delay = waitTime;
+                        continue;
+                    }
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${status}: ${statusText}`);
+                    }
+
+                    const data = await response.json();
+                    
+                    // Handle different response structures
+                    if (data.prices && Array.isArray(data.prices) && data.prices.length > 0) {
+                        return data.prices;
+                    } else if (data.market_chart && data.market_chart.prices) {
+                        return data.market_chart.prices;
                     } else {
-                        throw new Error(`API error: ${response.status}`);
+                        console.warn(`${coinId}: No prices in API response.`);
+                        return null;
                     }
                 } catch (error) {
                     if (attempts >= maxAttempts - 1) throw error;
                     attempts++;
-                    console.warn(`Fetch error: ${error.message}. Retrying in ${delay}ms...`);
+                    console.warn(`${coinId} fetch error: ${error.message}. Retrying in ${delay}ms...`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     delay *= 2;
                 }
