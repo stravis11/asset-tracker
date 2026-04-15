@@ -509,7 +509,7 @@
         // Stock symbols to track
         const STOCK_DATA = {
             tsla: { name: 'Tesla', symbol: 'TSLA', exchange: 'NASDAQ' },
-            door: { name: 'Open Door', symbol: 'DOOR', exchange: 'NASDAQ' },
+            door: { name: 'Open Door', symbol: 'OPEN', exchange: 'NASDAQ' },
             mstr: { name: 'Strategy', symbol: 'MSTR', exchange: 'NASDAQ' },
             nvidia: { name: 'Nvidia', symbol: 'NVDA', exchange: 'NASDAQ' }
         };
@@ -524,47 +524,175 @@
             mstr: null,
             nvidia: null
         };
+        const stockHistoryCache = {};
+        const cryptoPriceCache = {};
+        const cryptoHistoryCache = {};
+        const CRYPTO_PRICE_STORAGE_KEY = 'asset-tracker-crypto-prices-v1';
+        const CRYPTO_HISTORY_STORAGE_KEY = 'asset-tracker-crypto-history-v1';
+        const STOCK_HISTORY_STORAGE_KEY = 'asset-tracker-stock-history-v1';
+        const COINGECKO_API_KEY_STORAGE_KEY = 'asset-tracker-coingecko-api-key';
+        const TWELVE_DATA_API_KEY_STORAGE_KEY = 'asset-tracker-twelvedata-api-key';
 
         // COINGECKO API CONFIGURATION
         const COINGECKO_CONFIG = {
-            // Your free CoinGecko API key
-            API_KEY: 'CG-TgeUndKq2XWL5KihPygP7kFH',
+            API_KEY: null,
             MIN_WAIT_BETWEEN_QUERIES: 1000, // 1 second minimum between requests
             MAX_RETRIES: 3,
             RETRY_DELAYS: [1000, 2000, 5000] // Exponential backoff in ms
         };
 
-        // ALPHA VANTAGE API CONFIGURATION
-        const ALPHA_CONFIG = {
-            // Your free Alpha Vantage API key for stock data
-            API_KEY: 'F6N1CG6FI70OKLZG',
-            MIN_WAIT_BETWEEN_QUERIES: 12000, // 12 seconds minimum (5 calls/min limit)
+        // TWELVE DATA API CONFIGURATION
+        const TWELVE_DATA_CONFIG = {
+            API_KEY: null,
+            MIN_WAIT_BETWEEN_QUERIES: 1000, // 1 second pacing; retries/backoff handle throttling
             MAX_RETRIES: 3,
             RETRY_DELAYS: [1000, 2000, 5000]
         };
 
         // Request tracking
         let lastRequestTime = 0;
+        let coinGeckoRequestQueue = Promise.resolve();
+        let stockRequestQueue = Promise.resolve();
 
         // Get CoinGecko API URL with authentication
         function getCoinGeckoUrl(baseUri) {
             const url = new URL(baseUri);
             
-            if (COINGECKO_CONFIG.API_KEY && COINGECKO_CONFIG.API_KEY !== 'YOUR_API_KEY') {
-                url.searchParams.set('extension_api_key', COINGECKO_CONFIG.API_KEY);
+            if (COINGECKO_CONFIG.API_KEY) {
+                url.searchParams.set('x_cg_demo_api_key', COINGECKO_CONFIG.API_KEY);
                 console.log('✅ Using CoinGecko API key for authentication');
             }
             
             return url.toString();
         }
 
-        // Get Alpha Vantage API URL with authentication
-        function getAlphaUrl(baseUri) {
+        function queueCoinGeckoRequest(requestFn) {
+            const next = coinGeckoRequestQueue.then(requestFn, requestFn);
+            coinGeckoRequestQueue = next.catch(() => null);
+            return next;
+        }
+
+        function queueStockRequest(requestFn) {
+            const next = stockRequestQueue.then(requestFn, requestFn);
+            stockRequestQueue = next.catch(() => null);
+            return next;
+        }
+
+        function initializeApiKey(config, storageKey, promptMessage) {
+            const storedKey = localStorage.getItem(storageKey);
+            if (storedKey) {
+                config.API_KEY = storedKey;
+                return;
+            }
+
+            const enteredKey = window.prompt(promptMessage, '');
+            if (enteredKey) {
+                config.API_KEY = enteredKey;
+                localStorage.setItem(storageKey, enteredKey);
+            }
+        }
+
+        function loadCryptoCache() {
+            try {
+                const rawPrices = localStorage.getItem(CRYPTO_PRICE_STORAGE_KEY);
+                if (rawPrices) {
+                    Object.assign(cryptoPriceCache, JSON.parse(rawPrices));
+                }
+
+                const rawHistory = localStorage.getItem(CRYPTO_HISTORY_STORAGE_KEY);
+                if (rawHistory) {
+                    const parsedHistory = JSON.parse(rawHistory);
+                    Object.entries(parsedHistory).forEach(([key, prices]) => {
+                        if (Array.isArray(prices) && prices.length > 0) {
+                            cryptoHistoryCache[key] = prices;
+                        }
+                    });
+                }
+
+                console.log(`✅ Loaded crypto cache for ${Object.keys(cryptoPriceCache).length} prices and ${Object.keys(cryptoHistoryCache).length} charts`);
+            } catch (error) {
+                console.warn('⚠️ Failed to load crypto cache:', error.message);
+            }
+        }
+
+        function persistCryptoPriceCache() {
+            try {
+                localStorage.setItem(CRYPTO_PRICE_STORAGE_KEY, JSON.stringify(cryptoPriceCache));
+            } catch (error) {
+                console.warn('⚠️ Failed to persist crypto price cache:', error.message);
+            }
+        }
+
+        function persistCryptoHistoryCache() {
+            try {
+                localStorage.setItem(CRYPTO_HISTORY_STORAGE_KEY, JSON.stringify(cryptoHistoryCache));
+            } catch (error) {
+                console.warn('⚠️ Failed to persist crypto history cache:', error.message);
+            }
+        }
+
+        function loadStockHistoryCache() {
+            try {
+                const raw = localStorage.getItem(STOCK_HISTORY_STORAGE_KEY);
+                if (!raw) {
+                    return;
+                }
+
+                const parsed = JSON.parse(raw);
+                Object.entries(parsed).forEach(([symbol, prices]) => {
+                    if (Array.isArray(prices) && prices.length > 0) {
+                        stockHistoryCache[symbol] = prices;
+                    }
+                });
+
+                console.log(`✅ Loaded stock history cache for ${Object.keys(stockHistoryCache).length} symbols`);
+            } catch (error) {
+                console.warn('⚠️ Failed to load stock history cache:', error.message);
+            }
+        }
+
+        function persistStockHistoryCache() {
+            try {
+                localStorage.setItem(STOCK_HISTORY_STORAGE_KEY, JSON.stringify(stockHistoryCache));
+            } catch (error) {
+                console.warn('⚠️ Failed to persist stock history cache:', error.message);
+            }
+        }
+
+        function buildStockPriceSnapshotFromCache() {
+            const pricesData = {};
+
+            for (const [stockId, stockInfo] of Object.entries(STOCK_DATA)) {
+                const history = stockHistoryCache[stockInfo.symbol];
+                if (!history || history.length === 0) {
+                    continue;
+                }
+
+                const latestPrice = history[history.length - 1][1];
+                const previousPrice = history.length > 1 ? history[history.length - 2][1] : latestPrice;
+                const change = latestPrice - previousPrice;
+                const changePercent = previousPrice ? (change / previousPrice) * 100 : 0;
+
+                pricesData[stockId] = {
+                    price: latestPrice,
+                    change: change,
+                    changePercent: changePercent.toString(),
+                    volume: 0,
+                    latestTradingDay: new Date(history[history.length - 1][0]).toISOString().slice(0, 10),
+                    previousClose: previousPrice
+                };
+            }
+
+            return pricesData;
+        }
+
+        // Get Twelve Data API URL with authentication
+        function getTwelveDataUrl(baseUri) {
             const url = new URL(baseUri);
             
-            if (ALPHA_CONFIG.API_KEY && ALPHA_CONFIG.API_KEY !== 'YOUR_ALPHA_VANTAGE_KEY') {
-                url.searchParams.set('apikey', ALPHA_CONFIG.API_KEY);
-                console.log('✅ Using Alpha Vantage API key for authentication');
+            if (TWELVE_DATA_CONFIG.API_KEY) {
+                url.searchParams.set('apikey', TWELVE_DATA_CONFIG.API_KEY);
+                console.log('✅ Using Twelve Data API key for authentication');
             }
             
             return url.toString();
@@ -572,27 +700,10 @@
 
         // Get API URL dispatcher (routes to correct provider)
         function getApiUrl(baseUri, provider = 'coingecko') {
-            if (provider === 'alphavantage') {
-                return getAlphaUrl(baseUri);
+            if (provider === 'twelvedata') {
+                return getTwelveDataUrl(baseUri);
             }
             return getCoinGeckoUrl(baseUri);
-        }
-
-        // Get Alpha Vantage API URL
-        function getAlphaVantageUrl(functionName, symbol, api_key = null) {
-            const url = new URL('https://www.alphavantage.co/query');
-            url.searchParams.set('function', functionName);
-            url.searchParams.set('symbol', symbol);
-            
-            const key = api_key || ALPHA_CONFIG.API_KEY;
-            if (key && key !== 'YOUR_ALPHA_VANTAGE_KEY') {
-                url.searchParams.set('apikey', key);
-                console.log(`✅ Using Alpha Vantage API key for ${symbol}`);
-            } else {
-                console.error(`❌ Alpha Vantage API key not configured for ${symbol}`);
-            }
-            
-            return url.toString();
         }
 
         // Wait for rate limiting (generic CoinGecko)
@@ -609,22 +720,22 @@
             lastRequestTime = Date.now();
         }
 
-        // Wait for stock rate limiting (Alpha Vantage: 5/min = 12s minimum)
+        // Wait for stock API pacing
         let lastStockRequestTime = 0;
         async function waitForStockRateLimit() {
             const now = Date.now();
             const timeSinceLastRequest = now - lastStockRequestTime;
             
-            if (timeSinceLastRequest < ALPHA_CONFIG.MIN_WAIT_BETWEEN_QUERIES) {
-                const waitTime = ALPHA_CONFIG.MIN_WAIT_BETWEEN_QUERIES - timeSinceLastRequest;
-                console.log(`Stock rate limit: Waiting ${waitTime}ms before Alpha Vantage API call`);
+            if (timeSinceLastRequest < TWELVE_DATA_CONFIG.MIN_WAIT_BETWEEN_QUERIES) {
+                const waitTime = TWELVE_DATA_CONFIG.MIN_WAIT_BETWEEN_QUERIES - timeSinceLastRequest;
+                console.log(`Stock rate limit: Waiting ${waitTime}ms before Twelve Data API call`);
                 await sleep(waitTime);
             }
             
-            if (ALPHA_CONFIG.API_KEY === 'YOUR_ALPHA_VANTAGE_KEY') {
-                console.warn('❌ Alpha Vantage API key not configured - using placeholder');
+            if (!TWELVE_DATA_CONFIG.API_KEY) {
+                console.warn('❌ Twelve Data API key not configured - using placeholder');
             } else {
-                console.log(`✅ Using Alpha Vantage API key`);
+                console.log('✅ Using Twelve Data API key');
             }
             
             lastStockRequestTime = Date.now();
@@ -634,12 +745,13 @@
         async function fetchWithRetry(url, description = 'API call', maxRetries = COINGECKO_CONFIG.MAX_RETRIES) {
             for (let attempt = 0; attempt <= maxRetries; attempt++) {
                 try {
-                    await waitForRateLimit();
-                    
-                    const responseUrl = getCoinGeckoUrl(url);
-                    console.log(`🔵 ${description}: ${responseUrl}`);
-                    
-                    const response = await fetch(responseUrl);
+                    const response = await queueCoinGeckoRequest(async () => {
+                        await waitForRateLimit();
+
+                        const responseUrl = getCoinGeckoUrl(url);
+                        console.log(`🔵 ${description}: ${responseUrl}`);
+                        return fetch(responseUrl);
+                    });
                     
                     const status = response.status;
                     
@@ -682,59 +794,61 @@
             throw new Error('Unexpected error');
         }
 
-        // Fetch from Alpha Vantage with retry logic
-        async function fetchFromAlphaVantage(functionName, symbol, description = null) {
-            const desc = description || `Stock ${symbol}`;
-            const url = getAlphaVantageUrl(functionName, symbol);
+        // Fetch from Twelve Data with retry logic
+        async function fetchFromTwelveData(pathname, params, description = 'Stock request') {
+            const baseUrl = new URL(`https://api.twelvedata.com/${pathname}`);
+            Object.entries(params).forEach(([key, value]) => {
+                baseUrl.searchParams.set(key, value);
+            });
+            const desc = description;
             
-            for (let attempt = 0; attempt <= ALPHA_CONFIG.MAX_RETRIES; attempt++) {
+            for (let attempt = 0; attempt <= TWELVE_DATA_CONFIG.MAX_RETRIES; attempt++) {
                 try {
-                    await waitForStockRateLimit();
-                    
-                    console.log(`🟢 ${desc} Alpha Vantage: ${url}`);
-                    const response = await fetch(url);
+                    const response = await queueStockRequest(async () => {
+                        await waitForStockRateLimit();
+
+                        const url = getTwelveDataUrl(baseUrl.toString());
+                        console.log(`🟢 ${desc} Twelve Data: ${url}`);
+                        return fetch(url);
+                    });
                     const status = response.status;
                     
                     if (status === 200) {
                         const data = await response.json();
-                        
-                        // Check for error message in Alpha Vantage response
-                        if (data['Error Message']) {
-                            console.error(`❌ Alpha Vantage API Error for ${symbol}: ${data['Error Message']}`);
-                            throw new Error(`API Error: ${data['Error Message']}`);
-                        }
-                        if (data['Note']) {
-                            console.warn(`⚠️ Alpha Vantage Note for ${symbol}: ${data['Note']}`);
+
+                        if (data.status === 'error') {
+                            console.error(`❌ Twelve Data API Error for ${desc}: ${data.message}`);
+                            throw new Error(data.message || 'Twelve Data request failed');
                         }
                         
-                        console.log(`✅ ${desc}: Retrieved data from Alpha Vantage`);
+                        console.log(`✅ ${desc}: Retrieved data from Twelve Data`);
                         return data;
                     }
                     
                     if (status === 429) {
                         const retryAfter = response.headers.get('Retry-After') || 60;
                         const waitTime = Math.min(parseInt(retryAfter) * 1000, 15000);
-                        console.warn(`⚠️ Alpha Vantage rate limited for ${symbol}. Waiting ${waitTime}ms. Attempt ${attempt + 1}/${ALPHA_CONFIG.MAX_RETRIES}`);
+                        console.warn(`⚠️ Twelve Data rate limited for ${desc}. Waiting ${waitTime}ms. Attempt ${attempt + 1}/${TWELVE_DATA_CONFIG.MAX_RETRIES}`);
                         await sleep(waitTime);
                         continue;
                     }
                     
                     if (status === 401) {
-                        console.error(`❌ Alpha Vantage 401 - API key invalid for ${symbol}`);
-                        throw new Error('Invalid Alpha Vantage API key');
+                        console.error(`❌ Twelve Data 401 - API key invalid for ${desc}`);
+                        throw new Error('Invalid Twelve Data API key');
                     }
                     
                     throw new Error(`HTTP ${status}: ${response.statusText}`);
                     
                 } catch (error) {
-                    if (attempt < ALPHA_CONFIG.MAX_RETRIES) {
-                        const delay = ALPHA_CONFIG.RETRY_DELAYS[attempt] || 1000;
-                        console.warn(`⚠️ ${desc} Alpha Vantage attempt ${attempt + 1} failed: ${error.message}. Retrying in ${delay}ms...`);
+                    if (attempt < TWELVE_DATA_CONFIG.MAX_RETRIES) {
+                        const delay = TWELVE_DATA_CONFIG.RETRY_DELAYS[attempt] || 1000;
+                        console.warn(`⚠️ ${desc} Twelve Data attempt ${attempt + 1} failed: ${error.message}. Retrying in ${delay}ms...`);
                         await sleep(delay);
                         continue;
                     }
                     
-                    console.error(`❌ ${desc} Alpha Vantage failed after ${ALPHA_CONFIG.MAX_RETRIES + 1} attempts: ${error.message}`);
+                    console.error(`❌ ${desc} Twelve Data failed after ${TWELVE_DATA_CONFIG.MAX_RETRIES + 1} attempts: ${error.message}`);
                     throw error;
                 }
             }
@@ -763,6 +877,8 @@
                 
                 console.log('Fetching current prices...');
                 const data = await fetchWithRetry(url.toString(), 'Price fetch');
+                Object.assign(cryptoPriceCache, data);
+                persistCryptoPriceCache();
                 return data;
             } catch (error) {
                 console.error('Error fetching crypto data:', error.message);
@@ -772,6 +888,12 @@
 
         // Fetch historical price data
         async function fetchHistoricalData(coinId, days) {
+            const cacheKey = `${coinId}:${days}`;
+            if (cryptoHistoryCache[cacheKey]?.length) {
+                console.log(`✅ ${coinId}: Returning ${cryptoHistoryCache[cacheKey].length} cached crypto data points`);
+                return cryptoHistoryCache[cacheKey];
+            }
+
             const url = new URL('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart');
             url.searchParams.set('vs_currency', 'usd');
             url.searchParams.set('days', days.toString());
@@ -786,9 +908,13 @@
                 // Handle different response structures
                 if (data.prices && Array.isArray(data.prices) && data.prices.length > 0) {
                     console.log(`✅ ${coinId}: Retrieved ${data.prices.length} data points`);
+                    cryptoHistoryCache[cacheKey] = data.prices;
+                    persistCryptoHistoryCache();
                     return data.prices;
                 } else if (data.market_chart && data.market_chart.prices) {
                     console.log(`✅ ${coinId}: Retrieved ${data.market_chart.prices.length} data points`);
+                    cryptoHistoryCache[cacheKey] = data.market_chart.prices;
+                    persistCryptoHistoryCache();
                     return data.market_chart.prices;
                 } else {
                     console.warn(`⚠️ ${coinId}: No prices in API response`);
@@ -800,29 +926,33 @@
             }
         }
 
-        // Fetch current stock prices from Alpha Vantage
+        // Fetch current stock prices from Twelve Data
         async function fetchStockPrices() {
             try {
-                console.log('🟡 Fetching stock prices from Alpha Vantage...');
+                console.log('🟡 Fetching stock prices from Twelve Data daily series...');
                 const pricesData = {};
                 const errors = [];
 
                 for (const [symbol, stockInfo] of Object.entries(STOCK_DATA)) {
                     try {
-                        const data = await fetchFromAlphaVantage('GLOBAL_QUOTE', symbol);
-                        const quote = data['Global Quote'];
-                        if (quote && quote['01. symbol']) {
+                        const history = await fetchStockHistoricalData(symbol, 2);
+                        if (history && history.length > 0) {
+                            const latestPrice = history[history.length - 1][1];
+                            const previousPrice = history.length > 1 ? history[history.length - 2][1] : latestPrice;
+                            const change = latestPrice - previousPrice;
+                            const changePercent = previousPrice ? (change / previousPrice) * 100 : 0;
+
                             pricesData[symbol] = {
-                                price: parseFloat(quote['05. price']),
-                                change: parseFloat(quote['09. change']),
-                                changePercent: quote['10. change percent']?.replace('%', ''),
-                                volume: parseInt(quote['06. volume'] || '0'),
-                                latestTradingDay: quote['07. latest trading day'],
-                                previousClose: parseFloat(quote['08. previous close'])
+                                price: latestPrice,
+                                change: change,
+                                changePercent: changePercent.toString(),
+                                volume: 0,
+                                latestTradingDay: new Date(history[history.length - 1][0]).toISOString().slice(0, 10),
+                                previousClose: previousPrice
                             };
                             console.log(`✅ ${stockInfo.symbol}: $${pricesData[symbol].price.toLocaleString()}`);
                         } else {
-                            console.warn(`⚠️ ${stockInfo.symbol}: No quote data received`);
+                            console.warn(`⚠️ ${stockInfo.symbol}: No daily series data received`);
                         }
                     } catch (error) {
                         errors.push(symbol);
@@ -837,48 +967,42 @@
             }
         }
 
-        // Fetch stock historical data with different intervals
-        async function fetchStockHistoricalData(symbol, days) {
-            let interval = 'daily';
-            if (days <= 7) {
-                interval = '5min'; // More granular for short periods
-            } else if (days <= 30) {
-                interval = '15min';
-            }
+        // Fetch stock historical data with caching
+        async function fetchStockHistoricalData(stockId, days) {
+            const symbol = STOCK_DATA[stockId]?.symbol || stockId.toUpperCase();
 
             try {
-                const url = new URL('https://www.alphavantage.co/query');
-                url.searchParams.set('function', 'TIME_SERIES_DAILY');
-                // Use 'compact' for 100 latest data points
-                url.searchParams.set('outputsize', days <= 30 ? 'compact' : 'full');
-                url.searchParams.set('symbol', symbol);
+                console.log(`🟡 Fetching ${symbol} historical data (${days} days)...`);
 
-                console.log(`🟡 Fetching ${symbol} historical data (${days} days, ${interval})...`);
+                let prices = stockHistoryCache[symbol];
 
-                const data = await fetchFromAlphaVantage('TIME_SERIES_DAILY', symbol);
+                if (!prices) {
+                    const data = await fetchFromTwelveData('time_series', {
+                        symbol: symbol,
+                        interval: '1day',
+                        outputsize: '365'
+                    }, `Stock ${symbol}`);
 
-                if (data['Time Series (Daily)']) {
-                    const timeSeries = data['Time Series (Daily)'];
-                    const prices = [];
+                    if (!Array.isArray(data.values) || data.values.length === 0) {
+                        console.warn(`⚠️ ${symbol}: No historical data in response`);
+                        return null;
+                    }
 
-                    // Convert time series object to array format
-                    Object.entries(timeSeries).forEach(([date, values]) => {
-                        prices.push([new Date(date).getTime(), parseFloat(values['4. close'])]);
+                    prices = [];
+
+                    data.values.forEach(entry => {
+                        prices.push([new Date(entry.datetime).getTime(), parseFloat(entry.close)]);
                     });
 
-                    // Sort by date and limit to requested number of days
                     prices.sort((a, b) => new Date(a[0]) - new Date(b[0]));
-                    const slicedPrices = prices.slice(-days);
-
-                    console.log(`✅ ${symbol}: Retrieved ${slicedPrices.length} data points`);
-                    return slicedPrices;
-                } else if (data['Error Message']) {
-                    console.error(`❌ ${symbol}: ${data['Error Message']}`);
-                    throw new Error(data['Error Message']);
-                } else {
-                    console.warn(`⚠️ ${symbol}: No historical data in response`);
-                    return null;
+                    stockHistoryCache[symbol] = prices;
+                    persistStockHistoryCache();
+                    console.log(`✅ ${symbol}: Cached ${prices.length} historical data points`);
                 }
+
+                const slicedPrices = prices.slice(-days);
+                console.log(`✅ ${symbol}: Returning ${slicedPrices.length} cached data points`);
+                return slicedPrices;
             } catch (error) {
                 console.error(`❌ ${symbol} historical fetch failed: ${error.message}`);
                 throw error;
@@ -1265,6 +1389,8 @@ Details: ${error?.message || 'Unknown error'}`);
                 });
             });
             const priceValues = prices.map(item => item[1]);
+            const basePointRadius = priceValues.length === 1 ? 4 : 0;
+            const baseHoverRadius = 6;
 
             console.log(`Stock chart update: ${labels.length} labels, ${priceValues.length} values`);
 
@@ -1282,8 +1408,8 @@ Details: ${error?.message || 'Unknown error'}`);
                         borderWidth: 2,
                         fill: true,
                         tension: 0.4,
-                        pointRadius: 0,
-                        pointHoverRadius: 6
+                        pointRadius: basePointRadius,
+                        pointHoverRadius: baseHoverRadius
                     }]
                 };
                 
@@ -1294,17 +1420,32 @@ Details: ${error?.message || 'Unknown error'}`);
                 console.log(`Creating NEW stock chart for ${stockId}`);
                 createChart(stockId, ctx, color);
                 if (charts[stockId]) {
+                    charts[stockId].data = {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Price (USD)',
+                            data: priceValues,
+                            borderColor: color,
+                            backgroundColor: color + '20',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: basePointRadius,
+                            pointHoverRadius: baseHoverRadius
+                        }]
+                    };
                     charts[stockId].update();
                 }
             }
         }
 
         // Fetch and update stock chart
-        async function updateStockChart(stockId, days, coinSymbol, btnContext = null) {
+        async function updateStockChart(stockId, days, btnContext = null) {
             let updateBtn;
             let btnContainer;
+            const stockSymbol = STOCK_DATA[stockId]?.symbol || stockId.toUpperCase();
             
-            console.log(`updateStockChart called for ${stockId}, days: ${days}, coinSymbol: ${coinSymbol}`);
+            console.log(`updateStockChart called for ${stockId}, days: ${days}, stockSymbol: ${stockSymbol}`);
             
             if (btnContext) {
                 updateBtn = btnContext.querySelector(`.update-chart-btn[data-stock="${stockId}"]`);
@@ -1333,7 +1474,7 @@ Details: ${error?.message || 'Unknown error'}`);
             updateBtn.disabled = true;
 
             try {
-                const data = await fetchStockHistoricalData(coinSymbol, days);
+                const data = await fetchStockHistoricalData(stockId, days);
                 console.log(`Stock chart: Retrieved ${data?.length || 0} data points`);
                 
                 if (data && data.length > 0) {
@@ -1354,25 +1495,42 @@ Details: ${error?.message || 'Unknown error'}`);
         // Initialize the dashboard
         async function initDashboard() {
             console.log('Dashboard initializing...');
+            initializeApiKey(COINGECKO_CONFIG, COINGECKO_API_KEY_STORAGE_KEY, 'Enter your CoinGecko API key to enable crypto data. This will be saved in your browser for future visits.');
+            initializeApiKey(TWELVE_DATA_CONFIG, TWELVE_DATA_API_KEY_STORAGE_KEY, 'Enter your Twelve Data API key to enable stock data. This will be saved in your browser for future visits.');
+            loadCryptoCache();
+            loadStockHistoryCache();
             
             // Initial crypto data fetch
-            const cryptoData = await fetchCryptoData();
+            if (Object.keys(cryptoPriceCache).length > 0) {
+                updateUI(cryptoPriceCache);
+                console.log('✅ Crypto UI updated from local cache');
+            }
+
+            const cryptoData = Object.keys(cryptoPriceCache).length > 0 ? null : await fetchCryptoData();
             if (cryptoData) {
                 updateUI(cryptoData);
                 console.log('✅ Crypto UI updated with current prices');
             } else {
-                console.error('❌ Failed to fetch crypto data');
+                console.warn('⚠️ Crypto data fetch skipped or unavailable; using cache if present');
             }
 
             // Initial stock data fetch
-            const stockData = await fetchStockPrices();
-            if (stockData && stockData.prices) {
+            const cachedStockPrices = buildStockPriceSnapshotFromCache();
+            if (Object.keys(cachedStockPrices).length > 0) {
+                updateStockUI({ prices: cachedStockPrices, errors: [] });
+                console.log('✅ Stock UI updated from local cache');
+            }
+
+            const stockData = Object.keys(cachedStockPrices).length > 0 ? null : await fetchStockPrices();
+            if (stockData && Object.keys(stockData.prices).length > 0) {
                 updateStockUI(stockData);
                 console.log('✅ Stock UI updated with current prices');
             } else {
-                console.warn('⚠️ Stock data fetch incomplete, checking for API key...');
-                if (ALPHA_CONFIG.API_KEY === 'YOUR_ALPHA_VANTAGE_KEY') {
-                    console.error('❌ Alpha Vantage API key not configured - please get your API key from alphavantage.co');
+                console.warn('⚠️ Stock data fetch incomplete, checking cache/API key...');
+                if (!TWELVE_DATA_CONFIG.API_KEY) {
+                    console.error('❌ Twelve Data API key not configured - please get your API key from twelvedata.com');
+                } else if (Object.keys(cachedStockPrices).length > 0) {
+                    console.log('ℹ️ Continuing to use cached stock data');
                 }
             }
 
@@ -1408,8 +1566,13 @@ Details: ${error?.message || 'Unknown error'}`);
                         await updateChart(cryptoId, days, cardContainer, coinId);
                     });
 
-                    // Initialize with 1 day data
-                    updateChart(cryptoId, 1, cardContainer, coinId);
+                    // Initialize with cached data when available, otherwise load once
+                    const cachedCryptoHistory = cryptoHistoryCache[`${coinId}:1`];
+                    if (cachedCryptoHistory?.length) {
+                        updateChartData(cryptoId, cachedCryptoHistory, chartColors[cryptoId]);
+                    } else {
+                        updateChart(cryptoId, 1, cardContainer, coinId);
+                    }
                 });
 
                 // Initialize stock charts
@@ -1427,7 +1590,7 @@ Details: ${error?.message || 'Unknown error'}`);
                             console.log(`Timeframe button clicked for ${stockId}:`, e.target.dataset.days, 'days');
                             const clickedStockId = e.target.dataset.stock;
                             const days = parseInt(e.target.dataset.days);
-                            await updateStockChart(clickedStockId, days, stockInfo.symbol, cardContainer);
+                            await updateStockChart(clickedStockId, days, cardContainer);
                         });
                     });
 
@@ -1435,11 +1598,13 @@ Details: ${error?.message || 'Unknown error'}`);
                         const activeBtn = cardContainer?.querySelector(`.timeframe-btn[data-stock="${stockId}"].active`);
                         console.log('Update button clicked for', stockId, 'active button:', activeBtn);
                         const days = activeBtn ? parseInt(activeBtn.dataset.days) : 1;
-                        await updateStockChart(stockId, days, stockInfo.symbol, cardContainer);
+                        await updateStockChart(stockId, days, cardContainer);
                     });
 
-                    // Initialize with 1 day data
-                    updateStockChart(stockId, 1, stockInfo.symbol, cardContainer);
+                    // Initialize with cached data only, to avoid spending quota on page load
+                    if (stockHistoryCache[stockInfo.symbol]?.length) {
+                        updateStockChartData(stockId, stockHistoryCache[stockInfo.symbol].slice(-1), chartColors[stockId]);
+                    }
                 }
             }, 150);  // Small delay to ensure DOM is fully rendered
 
@@ -1452,12 +1617,53 @@ Details: ${error?.message || 'Unknown error'}`);
                 }
             }, 300000); // 5 minutes
 
-            // Note: Stock data refresh not automatically triggered due to API rate limits
-            console.log('Stock data refresh limited due to Alpha Vantage API rate limits (5/min)');
+            // Note: Stock data refresh is not automatically triggered to avoid unnecessary API calls
+            console.log('Stock data auto-refresh is disabled to preserve API usage');
+        }
+
+        async function ensureChartJsLoaded() {
+            if (typeof Chart !== 'undefined') {
+                return true;
+            }
+
+            const fallbackSources = [
+                'https://unpkg.com/chart.js@4.4.0/dist/chart.umd.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js'
+            ];
+
+            for (const src of fallbackSources) {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        script.src = src;
+                        script.async = true;
+                        script.onload = resolve;
+                        script.onerror = reject;
+                        document.head.appendChild(script);
+                    });
+
+                    if (typeof Chart !== 'undefined') {
+                        console.log(`✅ Loaded Chart.js fallback from ${src}`);
+                        return true;
+                    }
+                } catch (error) {
+                    console.warn(`⚠️ Failed to load Chart.js from ${src}`);
+                }
+            }
+
+            console.error('❌ Chart.js failed to load from all sources');
+            return false;
         }
 
         // Start the dashboard when page loads
-        window.addEventListener('DOMContentLoaded', initDashboard);
+        window.addEventListener('DOMContentLoaded', async () => {
+            const chartReady = await ensureChartJsLoaded();
+            if (!chartReady) {
+                alert('Chart library failed to load. Please check your network or try again.');
+                return;
+            }
+            await initDashboard();
+        });
     </script>
 </body>
 </html>
