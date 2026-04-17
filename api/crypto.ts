@@ -32,7 +32,7 @@ function sleep(ms: number) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const apiKey = process.env.COINGECKO_API_KEY;
-  const { ids, vs_currencies, include_24h_change, days, interval, coinId } = req.query;
+  const { ids, vs_currencies, include_24hr_change, days, interval, coinId } = req.query;
 
   if (!apiKey) {
     return res.status(500).json({ error: 'CoinGecko API key not configured' });
@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (coinId) {
       url = `${COINGECKO_BASE}/coins/${coinId}/market_chart?vs_currency=usd&days=${days || 30}&interval=${interval || 'daily'}&x_cg_demo_api_key=${apiKey}`;
     } else {
-      url = `${COINGECKO_BASE}/simple/price?ids=${ids}&vs_currencies=${vs_currencies || 'usd'}&include_24h_change=${include_24h_change !== 'false' ? 'true' : 'false'}&x_cg_demo_api_key=${apiKey}`;
+      url = `${COINGECKO_BASE}/simple/price?ids=${ids}&vs_currencies=${vs_currencies || 'usd'}&include_24hr_change=${include_24hr_change !== 'false' ? 'true' : 'false'}&x_cg_demo_api_key=${apiKey}`;
     }
 
     const data = await fetchWithRetry(url);
