@@ -537,17 +537,9 @@
         function setupCardExpand() {
             document.querySelectorAll('.crypto-card').forEach(card => {
                 card.addEventListener('mouseenter', () => {
-                    card.classList.remove('collapsed');
-                    card.classList.add('expanded');
                     const chartId = card.querySelector('.chart-container canvas')?.id?.replace('-chart', '');
                     if (chartId && charts[chartId]) {
                         charts[chartId].resize();
-                    }
-                });
-                card.addEventListener('mouseleave', () => {
-                    if (!card.querySelector('.update-chart-btn:hover')) {
-                        card.classList.remove('expanded');
-                        card.classList.add('collapsed');
                     }
                 });
             });
