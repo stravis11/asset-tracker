@@ -745,22 +745,13 @@
         async function fetchWithRetry(url, description = 'API call', maxRetries = COINGECKO_CONFIG.MAX_RETRIES) {
             for (let attempt = 0; attempt <= maxRetries; attempt++) {
                 try {
-                    const response = await queueCoinGeckoRequest(async () => {
-                        await waitForRateLimit();
-
-                        const responseUrl = getCoinGeckoUrl(url);
-                        console.log(`🔵 ${description}: ${responseUrl}`);
-                        return fetch(responseUrl);
-                    });
-                    
+                    const response = await fetch(url);
                     const status = response.status;
-                    
-                    // Success
+
                     if (status === 200) {
                         return await response.json();
                     }
-                    
-                    // Rate limited (429)
+
                     if (status === 429) {
                         const retryAfter = response.headers.get('Retry-After') || 30;
                         const waitTime = Math.min(parseInt(retryAfter) * 1000, 5000);
@@ -768,16 +759,9 @@
                         await sleep(waitTime);
                         continue;
                     }
-                    
-                    // Unauthorized (401)
-                    if (status === 401) {
-                        console.error('❌ 401 Unauthorized - API authentication failed');
-                        throw new Error('API requires authentication. Please check your API key.');
-                    }
-                    
-                    // Other errors
+
                     throw new Error(`HTTP ${status}: ${response.statusText}`);
-                    
+
                 } catch (error) {
                     if (attempt < maxRetries) {
                         const delay = COINGECKO_CONFIG.RETRY_DELAYS[attempt] || 1000;
@@ -785,75 +769,31 @@
                         await sleep(delay);
                         continue;
                     }
-                    
+
                     console.error(`❌ ${description} failed after ${maxRetries + 1} attempts: ${error.message}`);
                     throw error;
                 }
             }
-            
+
             throw new Error('Unexpected error');
         }
 
-        // Fetch from Twelve Data with retry logic
+        // Fetch from Twelve Data via proxy
         async function fetchFromTwelveData(pathname, params, description = 'Stock request') {
-            const baseUrl = new URL(`https://api.twelvedata.com/${pathname}`);
+            const url = new URL('/api/stocks', window.location.origin);
             Object.entries(params).forEach(([key, value]) => {
-                baseUrl.searchParams.set(key, value);
+                url.searchParams.set(key, value);
             });
-            const desc = description;
-            
-            for (let attempt = 0; attempt <= TWELVE_DATA_CONFIG.MAX_RETRIES; attempt++) {
-                try {
-                    const response = await queueStockRequest(async () => {
-                        await waitForStockRateLimit();
+            console.log(`🟢 ${description}: ${url}`);
+            const response = await fetch(url.toString());
+            const data = await response.json();
 
-                        const url = getTwelveDataUrl(baseUrl.toString());
-                        console.log(`🟢 ${desc} Twelve Data: ${url}`);
-                        return fetch(url);
-                    });
-                    const status = response.status;
-                    
-                    if (status === 200) {
-                        const data = await response.json();
-
-                        if (data.status === 'error') {
-                            console.error(`❌ Twelve Data API Error for ${desc}: ${data.message}`);
-                            throw new Error(data.message || 'Twelve Data request failed');
-                        }
-                        
-                        console.log(`✅ ${desc}: Retrieved data from Twelve Data`);
-                        return data;
-                    }
-                    
-                    if (status === 429) {
-                        const retryAfter = response.headers.get('Retry-After') || 60;
-                        const waitTime = Math.min(parseInt(retryAfter) * 1000, 15000);
-                        console.warn(`⚠️ Twelve Data rate limited for ${desc}. Waiting ${waitTime}ms. Attempt ${attempt + 1}/${TWELVE_DATA_CONFIG.MAX_RETRIES}`);
-                        await sleep(waitTime);
-                        continue;
-                    }
-                    
-                    if (status === 401) {
-                        console.error(`❌ Twelve Data 401 - API key invalid for ${desc}`);
-                        throw new Error('Invalid Twelve Data API key');
-                    }
-                    
-                    throw new Error(`HTTP ${status}: ${response.statusText}`);
-                    
-                } catch (error) {
-                    if (attempt < TWELVE_DATA_CONFIG.MAX_RETRIES) {
-                        const delay = TWELVE_DATA_CONFIG.RETRY_DELAYS[attempt] || 1000;
-                        console.warn(`⚠️ ${desc} Twelve Data attempt ${attempt + 1} failed: ${error.message}. Retrying in ${delay}ms...`);
-                        await sleep(delay);
-                        continue;
-                    }
-                    
-                    console.error(`❌ ${desc} Twelve Data failed after ${TWELVE_DATA_CONFIG.MAX_RETRIES + 1} attempts: ${error.message}`);
-                    throw error;
-                }
+            if (!response.ok || data.error) {
+                throw new Error(data.error || `HTTP ${response.status}`);
             }
-            
-            throw new Error('Unexpected error fetching stock data');
+
+            console.log(`✅ ${description}: Retrieved data from proxy`);
+            return data;
         }
 
         // Chart colors
@@ -870,11 +810,11 @@
         // Fetch crypto data from CoinGecko API
         async function fetchCryptoData() {
             try {
-                const url = new URL('https://api.coingecko.com/api/v3/simple/price');
+                const url = new URL('/api/crypto', window.location.origin);
                 url.searchParams.set('ids', CRYPTO_IDS.join(','));
                 url.searchParams.set('vs_currencies', 'usd');
                 url.searchParams.set('include_24h_change', 'true');
-                
+
                 console.log('Fetching current prices...');
                 const data = await fetchWithRetry(url.toString(), 'Price fetch');
                 Object.assign(cryptoPriceCache, data);
@@ -894,8 +834,8 @@
                 return cryptoHistoryCache[cacheKey];
             }
 
-            const url = new URL('https://api.coingecko.com/api/v3/coins/' + coinId + '/market_chart');
-            url.searchParams.set('vs_currency', 'usd');
+            const url = new URL('/api/crypto', window.location.origin);
+            url.searchParams.set('coinId', coinId);
             url.searchParams.set('days', days.toString());
             url.searchParams.set('interval', days < 7 ? 'hourly' : 'daily');
 
@@ -1495,8 +1435,6 @@ Details: ${error?.message || 'Unknown error'}`);
         // Initialize the dashboard
         async function initDashboard() {
             console.log('Dashboard initializing...');
-            initializeApiKey(COINGECKO_CONFIG, COINGECKO_API_KEY_STORAGE_KEY, 'Enter your CoinGecko API key to enable crypto data. This will be saved in your browser for future visits.');
-            initializeApiKey(TWELVE_DATA_CONFIG, TWELVE_DATA_API_KEY_STORAGE_KEY, 'Enter your Twelve Data API key to enable stock data. This will be saved in your browser for future visits.');
             loadCryptoCache();
             loadStockHistoryCache();
             
@@ -1526,10 +1464,8 @@ Details: ${error?.message || 'Unknown error'}`);
                 updateStockUI(stockData);
                 console.log('✅ Stock UI updated with current prices');
             } else {
-                console.warn('⚠️ Stock data fetch incomplete, checking cache/API key...');
-                if (!TWELVE_DATA_CONFIG.API_KEY) {
-                    console.error('❌ Twelve Data API key not configured - please get your API key from twelvedata.com');
-                } else if (Object.keys(cachedStockPrices).length > 0) {
+                console.warn('⚠️ Stock data fetch incomplete, checking cache...');
+                if (Object.keys(cachedStockPrices).length > 0) {
                     console.log('ℹ️ Continuing to use cached stock data');
                 }
             }
