@@ -856,7 +856,7 @@
                 const url = new URL('/api/crypto', window.location.origin);
                 url.searchParams.set('ids', CRYPTO_IDS.join(','));
                 url.searchParams.set('vs_currencies', 'usd');
-                url.searchParams.set('include_24h_change', 'true');
+                url.searchParams.set('include_24hr_change', 'true');
 
                 console.log('Fetching current prices...');
                 const data = await fetchWithRetry(url.toString(), 'Price fetch');
