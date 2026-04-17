@@ -60,15 +60,21 @@
         }
 
         .card-detail {
-            overflow: hidden;
-            max-height: 0;
+            display: grid;
+            grid-template-rows: 0fr;
             opacity: 0;
-            transition: max-height 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
+            transition: grid-template-rows 0.3s ease, opacity 0.3s ease, margin 0.3s ease;
             margin-top: 0;
+            overflow: hidden;
         }
 
-        .crypto-card.expanded .card-detail {
-            max-height: 400px;
+        .card-detail > * {
+            overflow: hidden;
+        }
+
+        .crypto-card.expanded .card-detail,
+        .crypto-card:hover .card-detail {
+            grid-template-rows: 1fr;
             opacity: 1;
             margin-top: 20px;
         }
@@ -530,9 +536,17 @@
         // Card expand/collapse on hover
         function setupCardExpand() {
             document.querySelectorAll('.crypto-card').forEach(card => {
-                card.addEventListener('mouseenter', () => card.classList.remove('collapsed'));
+                card.addEventListener('mouseenter', () => {
+                    card.classList.remove('collapsed');
+                    card.classList.add('expanded');
+                    const chartId = card.querySelector('.chart-container canvas')?.id?.replace('-chart', '');
+                    if (chartId && charts[chartId]) {
+                        charts[chartId].resize();
+                    }
+                });
                 card.addEventListener('mouseleave', () => {
                     if (!card.querySelector('.update-chart-btn:hover')) {
+                        card.classList.remove('expanded');
                         card.classList.add('collapsed');
                     }
                 });
